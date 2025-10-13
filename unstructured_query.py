@@ -32,7 +32,7 @@ client = chromadb.CloudClient(
   api_key='ck-yu7vxc2gHZuML9UYAzzHmvvWbEhgxvhxoskugYWi5kR',
   tenant='39d705f2-76cc-419f-adea-b71614d9aeb4',
   database='AIEquityAnalyst ')
-collection = client.get_or_create_collection("test_data")
+collection = client.get_or_create_collection("financial_data")
 
 # Embed and store
 embedding = embed_text([financial_text])[0]
