@@ -4,7 +4,7 @@ import uuid
 from urllib.request import urlopen
 import certifi, json
 import os
-
+from langchain_core.tools import tool
 
 """
 Discounted Cash Flow (DCF) valuation tool for the Agentic AI Equity Analyst project.
@@ -73,7 +73,7 @@ def calculate_dcf(
 
 
 try:
-    from langchain.tools import tool # type: ignore
+    from langchain.tools import tool 
 
     @tool("DCF Valuation Tool")
     def dcf_tool(
