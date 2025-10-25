@@ -64,7 +64,7 @@ def flatten_json_to_text(obj):
     
     return str(obj)
 
-for txt in json_data:
+for txt in chunks:
   #print(txt)
 
   collection.add_texts(texts=[flatten_json_to_text(txt)], 
