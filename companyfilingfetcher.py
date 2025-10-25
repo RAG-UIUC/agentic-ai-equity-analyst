@@ -1,9 +1,6 @@
 import requests
-import pandas as pd
 import uuid
 from openai import OpenAI
-from urllib.request import urlopen
-import certifi, json
 import os
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
@@ -19,11 +16,6 @@ embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 def embed_text(text):
     return embeddings.embed_documents(text)
 
-'''chroma_client = chromadb.CloudClient(
-  api_key=os.getenv("CHROMADB_API_KEY"),
-  tenant=os.getenv("CHROMADB_TENANT"),
-  database=os.getenv("CHROMADB"))'''
-
 collection = Chroma(
     database=os.getenv("CHROMADB"),
     collection_name="company_filings",
@@ -37,39 +29,52 @@ year = 2022
 ticker = "AAPL"
 per = "FY" # Q4, FY are 10-K reports; Q1-3 are 10-Q reports
 
-def get_jsonparsed_data(url):
-    response = urlopen(url, cafile=certifi.where())
-    data = response.read().decode("utf-8")
-    return json.loads(data)
+# these lines read the filing and such 
+# OH MY GOD CHUNKING !!!!!!!!!!!!!!! (REAL) 
+from langchain_text_splitters import RecursiveJsonSplitter, RecursiveCharacterTextSplitter
 
-# these lines read the filing 
-'''
-url = f"https://financialmodelingprep.com/stable/financial-reports-xlsx?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
-
-xcel = requests.get(url) # 1 api call to fmp
-
-read = pd.read_excel(xcel.content, sheet_name=None)
 filename = ""
+doctype = ""
 
 if per == "FY" or per == "Q4":
   filename = f"{ticker}_{year}_10-K_filing"
+  doctype = "10-K filing"
 else:
   filename = f"{ticker}_{year}_{per}_10-Q_filing"
+  doctype = "10-Q filing"
 
-for k, v in read.items():
-  v.to_csv(k, index=None, header=True)
-  data = pd.read_csv(k)
-  df = pd.DataFrame(data)
+url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
+json_data = requests.get(url).json()
+json_splitter = RecursiveJsonSplitter(max_chunk_size=300)
+txt_splitter = RecursiveCharacterTextSplitter()
 
-  for row in data.iterrows():
-    txt = row[1].to_string()
-    unique_id = str(uuid.uuid4())
-    collection.add(embeddings=[embed_text(txt)[0]], documents=[f"{filename} : {txt}"], ids=[unique_id])
+chunks = json_splitter.split_json(json_data=json_data, convert_lists=True)
+txt = chunks[0] 
+
+unique_id = str(uuid.uuid4())
+
+def flatten_json_to_text(obj):
+    if isinstance(obj, dict):
+        parts = []
+        for k, v in obj.items():
+            parts.append(f"{k}: {flatten_json_to_text(v)}")
+        return ", ".join(parts)
+    elif isinstance(obj, list):
+        return ", ".join(flatten_json_to_text(x) for x in obj)
+    
+    return str(obj)
+
+for txt in chunks:
+  #print(txt)
+
+  collection.add_texts(texts=[flatten_json_to_text(txt)], 
+                       ids=[unique_id], 
+                       metadatas=[ticker, year, per, doctype])
+
+# testing stuffs
 '''
-
 query = "Apple's revenue in 2022"
-res = vector_store.similarity_search(query=query, k=10)
-
+res = collection.similarity_search(query=query, k=10)
 
 # langchain conversion (this is here just for testing)
 from langchain.chat_models import init_chat_model
@@ -82,3 +87,4 @@ messages = [SystemMessage(content="You are a professional technical financial an
             ]
 
 print(model.invoke(messages).content)
+'''
