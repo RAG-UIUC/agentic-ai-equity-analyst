@@ -143,16 +143,3 @@ def embed_json(json_data):
                         metadatas=[{"parent" : par_id, "ticker" : ticker, "year" : year, "period" : per, "type" : doctype}])
 
 # embed_json(json_data)
-
-# testing stuffs
-
-'''
-query = "Apple's revenue in 2022"
-res = collection.similarity_search(query=query, k=10)
-
-messages = [SystemMessage(content="You are a professional technical financial analyst."),
-            HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
-            ]
-
-print(model.invoke(messages).content)
-'''
