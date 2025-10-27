@@ -55,7 +55,6 @@ with open("parser_queries.txt", "r") as f:
     for line in f:
       spl = line.rstrip('\n').split(":")
       query = company + " " + spl[0] + " " + "in " + year
-      print(query)
       if spl[1] == "yf":
         res = yfinance_data.similarity_search(query=query, k=10)
       else:
@@ -65,7 +64,6 @@ with open("parser_queries.txt", "r") as f:
                   ]
       
       txt = chunk_text(model.invoke(messages).content)
-      print(txt)
       ids = [company + " " + year + " " + str(i) for i in range(len(txt))]
       parser_data.add_texts(texts=txt,metadatas=[{"company": company,"year": year} for _ in txt],ids=ids)
 
