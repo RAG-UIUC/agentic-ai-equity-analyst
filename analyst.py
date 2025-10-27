@@ -15,7 +15,7 @@ embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
 collection = Chroma(
     database=os.getenv("CHROMADB"),
-    collection_name="testing", # <-- PAY ATTENTION HERE
+    collection_name="company_filings", # <-- PAY ATTENTION HERE
     embedding_function=embeddings,
     chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
     tenant=os.getenv("CHROMADB_TENANT"),
@@ -23,11 +23,14 @@ collection = Chroma(
 
 model = init_chat_model("gpt-4o", model_provider="openai")
 
-query = "Apple's revenue growth in 2022"
+query = "Apple's revenue growth in 2024"
 res = collection.similarity_search(query=query, k=10)
 
 messages = [SystemMessage(content="You are a professional technical financial analyst."),
             HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
             ]
 
-print(model.invoke(messages).content)
+res = model.invoke(messages).content
+
+print(len(res))
+print(res)
