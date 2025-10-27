@@ -17,31 +17,17 @@ embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
 collection = Chroma(
     database=os.getenv("CHROMADB"),
-    collection_name="testing", # <-- PAY ATTENTION HERE
+    collection_name="company_filings", # <-- PAY ATTENTION HERE
     embedding_function=embeddings,
     chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
     tenant=os.getenv("CHROMADB_TENANT"),
 )
 
 fmp_key = os.getenv("FMP_API_KEY")
-year = 2022
-ticker = "AAPL"
-per = "FY" # Q4, FY are 10-K reports; Q1-3 are 10-Q reports
+# Q4, FY are 10-K reports; Q1-3 are 10-Q reports
 
 model = init_chat_model("gpt-4o", model_provider="openai")
 
-filename = ""
-doctype = ""
-
-if per == "FY" or per == "Q4":
-  filename = f"{ticker}_{year}_10-K_filing"
-  doctype = "10-K filing"
-else:
-  filename = f"{ticker}_{year}_{per}_10-Q_filing"
-  doctype = "10-Q filing"
-
-url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
-json_data = requests.get(url).json()
 json_splitter = RecursiveJsonSplitter(max_chunk_size=1000)
 txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.35)
 MIN_CHUNK_SZ = 3 
@@ -131,15 +117,31 @@ def parse_json(obj, par_str, parent_id):
   else: 
     if str(obj).isspace() == False:
       for i in chunk_text(str(obj)):
-        chunks.append((par_str + i, str(uuid.uuid4()), parent_id))
+        chunks.append((f"{par_str} -> {i}", str(uuid.uuid4()), parent_id))
     
   return chunks 
 
 
-def embed_json(json_data):
+def embed_filing(ticker, year, per):
+  url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
+  json_data = requests.get(url).json()
+  filename = ""
+  doctype = ""
+
+  if per == "FY" or per == "Q4":
+    filename = f"{ticker}_{year}_10-K_filing"
+    doctype = "10-K filing"
+  else:
+    filename = f"{ticker}_{year}_{per}_10-Q_filing"
+    doctype = "10-Q filing"
+
   for i, cur_id, par_id in parse_json(json_data, "", 0):
     collection.add_texts(texts=[i], 
                         ids=[cur_id],
-                        metadatas=[{"parent" : par_id, "ticker" : ticker, "year" : year, "period" : per, "type" : doctype}])
+                        metadatas=[{"document" : filename, "parent" : par_id, "ticker" : ticker, "year" : year, "period" : per, "type" : doctype}])
 
-# embed_json(json_data)
+
+#embed_filing(ticker="AAPL", year=2024, per="Q1")
+#embed_filing(ticker="AAPL", year=2024, per="Q2")
+#embed_filing(ticker="AAPL", year=2024, per="Q3")
+#embed_filing(ticker="AAPL", year=2024, per="Q4")
