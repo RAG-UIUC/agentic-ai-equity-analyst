@@ -1,5 +1,6 @@
 import requests, uuid, os
 from openai import OpenAI
+import re
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
@@ -41,30 +42,46 @@ yfinance_data = Chroma(
 embeddings = OpenAIEmbeddings(model = "text-embedding-3-small", api_key=openai_api_key)
 model = init_chat_model("gpt-4o", model_provider="openai")
 txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.35)
-MIN_CHUNK_SZ = 3 
-CHUNK_NO = 5 
 TXT_THRESHOLD = 200
 
 def chunk_text(txt):
   if (len(txt) > TXT_THRESHOLD):
     return txt_splitter.split_text(txt)
-
   return [txt]
+  
 
+def clean_text_list(texts):
+    cleaned = []
+    for t in texts:
+        if not isinstance(t, str):
+            t = str(t)
+        t = re.sub(r'\s+', ' ', t).strip()
+        cleaned.append(t)
+    return cleaned
+
+def clean_text(text):
+  text = re.sub(r'\s+', ' ', text)
+  text = text.strip()
+  return text
 with open("parser_queries.txt", "r") as f:
     for line in f:
-      spl = line.rstrip('\n').split(":")
+      line = line.strip()
+      spl = line.split(":")
+      print(spl)
       query = company + " " + spl[0] + " " + "in " + year
+      print(query)
       if spl[1] == "yf":
         res = yfinance_data.similarity_search(query=query, k=10)
       else:
         res = company_filings.similarity_search(query=query, k=10)
-      messages = [SystemMessage(content="You are a professional financial equity analyst."),
-                  HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
-                  ]
-      
+      cleaned_text = clean_text(" ".join([doc.page_content for doc in res]) if isinstance(res, list) else str(res))
+      messages = [
+          SystemMessage(content="You are a professional financial equity analyst. Always produce clean, continuous text without unnecessary line breaks or bullet points."), HumanMessage(content=f"Summarize and analyze the following data. Write in paragraph form only (no line breaks, lists, or formatting): {cleaned_text}")
+      ]
       txt = chunk_text(model.invoke(messages).content)
-      ids = [company + " " + year + " " + str(i) for i in range(len(txt))]
+      ids = [f"{company}_{year}_{uuid.uuid4()}_{i}" for i in range(len(txt))]
+      txt = clean_text_list(txt)
+      print(txt)
       parser_data.add_texts(texts=txt,metadatas=[{"company": company,"year": year} for _ in txt],ids=ids)
 
 
