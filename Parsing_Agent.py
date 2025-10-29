@@ -1,10 +1,8 @@
-import requests, uuid, os
-from openai import OpenAI
+import uuid, os
 import re
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
-from langchain_text_splitters import RecursiveJsonSplitter
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -39,7 +37,6 @@ yfinance_data = Chroma(
     chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
     tenant=os.getenv("CHROMADB_TENANT"),
 )
-embeddings = OpenAIEmbeddings(model = "text-embedding-3-small", api_key=openai_api_key)
 model = init_chat_model("gpt-4o", model_provider="openai")
 txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.35)
 TXT_THRESHOLD = 200

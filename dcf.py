@@ -63,9 +63,15 @@ def calculate_dcf(
 
     # Step 5: Compare intrinsic value vs current price
     undervaluation_percent = ((intrinsic_value - current_price) / current_price) * 100
-
+    if undervaluation_percent < 0:
+        return {
+            "dcf/intrinsic_value": round(intrinsic_value, 2),
+            "current_price": round(current_price, 2),
+            "overvaluation_percent": round(-1 * undervaluation_percent, 2),
+            "terminal_value": round(terminal_value, 2),
+        }
     return {
-        "intrinsic_value": round(intrinsic_value, 2),
+        "dcf/intrinsic_value": round(intrinsic_value, 2),
         "current_price": round(current_price, 2),
         "undervaluation_percent": round(undervaluation_percent, 2),
         "terminal_value": round(terminal_value, 2),
