@@ -9,9 +9,6 @@ MVP GOAL:
 - Input: Company ticker symbol (e.g., AAPL)
 - Output: JSON lines file with news headlines, URLs, snippets, and dates
 - Usage: Can later feed into RAG or reporting agents for contextual analysis
-
-how to run in terminal: python news_loader.py --ticker [ticker symbol] --time-range [time range]
-
 """
 
 from __future__ import annotations

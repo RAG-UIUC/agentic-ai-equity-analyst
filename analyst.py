@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from langchain.tools import tool
 import os
 
 load_dotenv()
@@ -15,7 +16,7 @@ embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
 collection = Chroma(
     database=os.getenv("CHROMADB"),
-    collection_name="company_filings", # <-- PAY ATTENTION HERE
+    collection_name="company_filings", 
     embedding_function=embeddings,
     chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
     tenant=os.getenv("CHROMADB_TENANT"),
@@ -23,14 +24,17 @@ collection = Chroma(
 
 model = init_chat_model("gpt-4o", model_provider="openai")
 
-query = "Apple's revenue growth in 2024"
-res = collection.similarity_search(query=query, k=10)
+@tool
+def analyze(query):
+    """Analyze the query using the data fetched in the database
+    
+    """
+    res = collection.similarity_search(query=query, k=10)
 
-messages = [SystemMessage(content="You are a professional technical financial analyst."),
-            HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
-            ]
+    messages = [SystemMessage(content="You are a professional technical financial analyst."),
+                HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
+                ]
+    
+    return model.invoke(messages).content
 
-res = model.invoke(messages).content
-
-print(len(res))
-print(res)
+#print(analyze("Apple's revenue growth in 2024"))
