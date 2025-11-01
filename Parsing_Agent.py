@@ -80,5 +80,3 @@ with open("parser_queries.txt", "r") as f:
       txt = clean_text_list(txt)
       print(txt)
       parser_data.add_texts(texts=txt,metadatas=[{"company": company,"year": year} for _ in txt],ids=ids)
-
-
