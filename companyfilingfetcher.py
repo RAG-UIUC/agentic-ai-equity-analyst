@@ -1,4 +1,4 @@
-import requests, uuid, os
+import requests, uuid, os, re 
 from openai import OpenAI
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
@@ -29,12 +29,19 @@ fmp_key = os.getenv("FMP_API_KEY")
 model = init_chat_model("gpt-4o", model_provider="openai")
 
 json_splitter = RecursiveJsonSplitter(max_chunk_size=1000)
-txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.35)
+txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.5)
 MIN_CHUNK_SZ = 3 
 CHUNK_NO = 5 
-TXT_THRESHOLD = 200 # This is a good value. Please do not touch it. It's mine. - William 
+TXT_THRESHOLD = 200 # This is a good value. Please do not touch it. It's mine. - William    
+
+def clean_text(text):
+  text = re.sub(r'\s+', ' ', text)
+  text = text.strip()
+  return text
 
 def chunk_text(txt):
+  txt = clean_text(txt)
+
   if (len(txt) > TXT_THRESHOLD):
     return txt_splitter.split_text(txt)
 
@@ -56,7 +63,7 @@ def parse_json(obj, par_str, parent_id):
 
     if len(items) >= CHUNK_NO * MIN_CHUNK_SZ:
       for i in range(CHUNK_NO):
-        par = f"{par_str} -> "
+        par = par_str
         cur_id = str(uuid.uuid4())
         alt = ""
 
@@ -66,20 +73,20 @@ def parse_json(obj, par_str, parent_id):
           par += f"{k}, "
 
           if isinstance(v, (dict, list)): 
-            chunks.extend(parse_json(v, f"{par_str} -> {k}", cur_id))
+            chunks.extend(parse_json(v, f"{par_str}{k} -> ", cur_id))
           elif isinstance(v, (int, float, bool)):
             alt += f"{k} : {v}, "
           elif isinstance(v, str):
             if str(v).isspace() == False:        
               for i in chunk_text(str(v)):
-                chunks.append((f"{par_str} -> {k} : {i}", str(uuid.uuid4()), cur_id))
+                chunks.append((f"{par_str}{k} : {i}", str(uuid.uuid4()), cur_id))
 
         if len(alt) > 0:
-          chunks.append((f"{par_str} -> {alt}", str(uuid.uuid4()), cur_id))
+          chunks.append((f"{par_str}{alt}", str(uuid.uuid4()), cur_id))
 
         chunks.append((par, cur_id, parent_id))
     else:
-      par = f"{par_str} -> "
+      par = par_str
       cur_id = str(uuid.uuid4())
       alt = ""
 
@@ -87,17 +94,17 @@ def parse_json(obj, par_str, parent_id):
         par += f"{k}, "
 
         if isinstance(v, (dict, list)): 
-          chunks.extend(parse_json(v, f"{par_str} -> {k}", cur_id))
+          chunks.extend(parse_json(v, f"{par_str}{k} -> ", cur_id))
         elif isinstance(v, (int, float, bool)):
           alt += f"{k} : {v}, "
         elif isinstance(v, str):
           if str(v).isspace() == False:        
             for i in chunk_text(str(v)):
-              chunks.append((f"{par_str} -> {k} : {i}", str(uuid.uuid4()), cur_id))
+              chunks.append((f"{par_str}{k} : {i}", str(uuid.uuid4()), cur_id))
 
       if len(alt) > 0:
         for i in chunk_text(alt):
-          chunks.append((f"{par_str} -> {i}", str(uuid.uuid4()), cur_id))
+          chunks.append((f"{par_str}{i}", str(uuid.uuid4()), cur_id))
 
       chunks.append((par, cur_id, parent_id))
 
@@ -112,12 +119,12 @@ def parse_json(obj, par_str, parent_id):
 
     if len(alt) > 0: 
       for i in chunk_text(alt):
-        chunks.append((f"{par_str} -> {i}", str(uuid.uuid4()), parent_id))
+        chunks.append((f"{par_str}{i}", str(uuid.uuid4()), parent_id))
 
   else: 
     if str(obj).isspace() == False:
       for i in chunk_text(str(obj)):
-        chunks.append((f"{par_str} -> {i}", str(uuid.uuid4()), parent_id))
+        chunks.append((f"{par_str}{i}", str(uuid.uuid4()), parent_id))
     
   return chunks 
 
@@ -141,7 +148,7 @@ def embed_filing(ticker, year, per):
                         metadatas=[{"document" : filename, "parent" : par_id, "ticker" : ticker, "year" : year, "period" : per, "type" : doctype}])
 
 
-#embed_filing(ticker="AAPL", year=2024, per="Q1")
-#embed_filing(ticker="AAPL", year=2024, per="Q2")
-#embed_filing(ticker="AAPL", year=2024, per="Q3")
-#embed_filing(ticker="AAPL", year=2024, per="Q4")
+embed_filing(ticker="AAPL", year=2024, per="Q1")
+embed_filing(ticker="AAPL", year=2024, per="Q2")
+embed_filing(ticker="AAPL", year=2024, per="Q3")
+embed_filing(ticker="AAPL", year=2024, per="Q4")
