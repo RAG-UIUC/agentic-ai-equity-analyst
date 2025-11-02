@@ -1,21 +1,7 @@
-import requests
-import pandas as pd
-import uuid
-from urllib.request import urlopen
-import certifi, json
-import os
-from langchain_core.tools import tool
-
-"""
-Discounted Cash Flow (DCF) valuation tool for the Agentic AI Equity Analyst project.
-This script can be run standalone, imported by the Valuation Agent, or wrapped as
-a LangChain Tool. It computes intrinsic value, terminal value, and undervaluation %
-based on projected Free Cash Flows (FCFs).
-"""
-
+from langchain.tools import tool
 from typing import List, Dict
 
-
+#@tool 
 def calculate_dcf(
     free_cash_flows: List[float],
     discount_rate: float,
@@ -70,29 +56,6 @@ def calculate_dcf(
         "undervaluation_percent": round(undervaluation_percent, 2),
         "terminal_value": round(terminal_value, 2),
     }
-
-
-try:
-    from langchain.tools import tool 
-
-    @tool("DCF Valuation Tool")
-    def dcf_tool(
-        free_cash_flows: List[float],
-        discount_rate: float,
-        terminal_growth_rate: float,
-        current_price: float
-    ) -> Dict[str, float]:
-        """
-        LangChain-compatible wrapper for the DCF valuation model.
-        Enables use within Valuation Agents or LangGraph flows.
-        """
-        return calculate_dcf(free_cash_flows, discount_rate, terminal_growth_rate, current_price)
-
-except ImportError:
-    # LangChain not installed; skip wrapper definition.
-    pass
-
-
 
 if __name__ == "__main__":
     print("\n=== DCF Valuation Test ===")
