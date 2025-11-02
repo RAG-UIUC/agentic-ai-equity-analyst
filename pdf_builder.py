@@ -10,3 +10,4 @@ def report(content):
    """
 
    st.write(content)
+

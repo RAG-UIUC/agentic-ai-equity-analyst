@@ -6,6 +6,7 @@ from langchain_chroma import Chroma
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
+from openai import OpenAI
 
 load_dotenv()
 
@@ -13,9 +14,10 @@ load_dotenv()
 company = "Apple"
 year = "2024"
 
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 EMBEDDING_MODEL = "text-embedding-3-small"
-openai_api_key = os.getenv("OPENAI_API_KEY")
-embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL, api_key=openai_api_key)
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 parser_data = Chroma(
     database=os.getenv("CHROMADB"),
     collection_name="parser_data",

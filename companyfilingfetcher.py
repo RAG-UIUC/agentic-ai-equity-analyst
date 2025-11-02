@@ -1,4 +1,4 @@
-import requests, uuid, os, re 
+import requests, uuid, os, re, datetime, pytz
 from openai import OpenAI
 from dotenv import load_dotenv
 from langchain_openai import OpenAIEmbeddings
@@ -7,6 +7,9 @@ from langchain_text_splitters import RecursiveJsonSplitter
 from langchain_experimental.text_splitter import SemanticChunker
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
+from datetime import timezone
+
+from langchain.tools import tool
 
 load_dotenv()
 
@@ -129,26 +132,37 @@ def parse_json(obj, par_str, parent_id):
   return chunks 
 
 
-def embed_filing(ticker, year, per):
+def embed_filing(ticker, company, year, per):
   url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
   json_data = requests.get(url).json()
-  filename = ""
   doctype = ""
 
   if per == "FY" or per == "Q4":
-    filename = f"{ticker}_{year}_10-K_filing"
     doctype = "10-K filing"
   else:
-    filename = f"{ticker}_{year}_{per}_10-Q_filing"
     doctype = "10-Q filing"
+
+  ny_tz = pytz.timezone("America/New_York")
+  ts_ny = datetime.datetime.now(ny_tz)
 
   for i, cur_id, par_id in parse_json(json_data, "", 0):
     collection.add_texts(texts=[i], 
                         ids=[cur_id],
-                        metadatas=[{"document" : filename, "parent" : par_id, "ticker" : ticker, "year" : year, "period" : per, "type" : doctype}])
+                        metadatas=[{
+                                    "symbol" : ticker,
+                                    "company" : company,
+                                    "date_retrieved" : datetime.datetime.today().isoformat(),
+                                    "time_retrieved" : datetime.datetime.now(timezone.utc).astimezone(ny_tz).strftime("%H:%M:%S"),
+                                    "date_published" : ts_ny.date().isoformat(),
+                                    "time_published" : ts_ny.strftime("%H:%M:%S"),
+                                    "source" : "fmp",
+                                    "url" : url,
+                                    "parent" : par_id, 
+                                    "type" : doctype
+                                  }])
 
 
-embed_filing(ticker="AAPL", year=2024, per="Q1")
-embed_filing(ticker="AAPL", year=2024, per="Q2")
-embed_filing(ticker="AAPL", year=2024, per="Q3")
-embed_filing(ticker="AAPL", year=2024, per="Q4")
+embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q1")
+embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q2")
+embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q3")
+embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q4")

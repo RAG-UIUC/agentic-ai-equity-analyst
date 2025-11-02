@@ -4,9 +4,8 @@
 from langchain_openai import ChatOpenAI
 from pdf_builder import report 
 from analyst import analyze
-from langgraph.checkpoint.memory import InMemorySaver
-from langchain.agents import create_agent
 from dataclasses import dataclass
+from deepagents import create_deep_agent
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2, timeout=15)
@@ -32,10 +31,9 @@ class ResponseFormat:
 
 
 
-agent = create_agent(model=llm, 
+agent = create_deep_agent(model=llm, 
                      system_prompt=SYSTEM_PROMPT, 
                      tools=tools, 
-                     response_format=ResponseFormat, 
                      )
 
 
@@ -44,4 +42,4 @@ response = agent.invoke(
     {"messages" : [{"role" : "user", "content" : "what is Apple's revenue growth in 2024?"}]}
 )
 
-print(response["structured_response"])
+print(response["messages"][-1].content)

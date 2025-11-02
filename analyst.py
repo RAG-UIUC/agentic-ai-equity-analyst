@@ -24,11 +24,14 @@ collection = Chroma(
 
 model = init_chat_model("gpt-4o", model_provider="openai")
 
+
+# TODO: modify so that you can query on multiple differnt collections 
 @tool
 def analyze(query):
     """Analyze the query using the data fetched in the database
     
     """
+
     res = collection.similarity_search(query=query, k=10)
 
     messages = [SystemMessage(content="You are a professional technical financial analyst."),
@@ -36,5 +39,3 @@ def analyze(query):
                 ]
     
     return model.invoke(messages).content
-
-#print(analyze("Apple's revenue growth in 2024"))
