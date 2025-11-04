@@ -1,6 +1,29 @@
+import os, re, datetime, pytz
+from dotenv import load_dotenv
+from openai import OpenAI
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
 from langchain.tools import tool
 from typing import List, Dict
 
+
+# ---------------------- ENV + EMBEDDINGS ---------------------- #
+load_dotenv()
+
+EMBEDDING_MODEL = "text-embedding-3-small"
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
+
+collection = Chroma(
+    database=os.getenv("CHROMADB"),
+    collection_name="parser_data",  # your parsed filings
+    embedding_function=embeddings,
+    chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
+    tenant=os.getenv("CHROMADB_TENANT"),
+)
+
+
+# ---------------------- DCF FUNCTION ---------------------- #
 #@tool 
 def calculate_dcf(
     free_cash_flows: List[float],
@@ -57,6 +80,113 @@ def calculate_dcf(
         "terminal_value": round(terminal_value, 2),
     }
 
+
+
+# ---------------------- HELPERS ---------------------- #
+def extract_number_with_unit(text: str, context: str = "") -> List[float]:
+    """
+    Extract numbers with unit detection and contextual filtering.
+    Example: '$27.9 billion' -> 27900000000.0
+    """
+    pattern = r"(\$?\d+(?:\.\d+)?)\s*(billion|million|thousand|%)?"
+    matches = re.findall(pattern, text, flags=re.IGNORECASE)
+    values = []
+
+    for num_str, unit in matches:
+        # Skip years (2020–2030 range) or IDs like 2024
+        if len(num_str) == 4 and num_str.startswith(("19", "20")):
+            continue
+
+        num = float(num_str.replace("$", ""))
+        if unit:
+            unit = unit.lower()
+            if "billion" in unit:
+                num *= 1e9
+            elif "million" in unit:
+                num *= 1e6
+            elif "thousand" in unit:
+                num *= 1e3
+            elif "%" in unit:
+                if "growth" in context.lower():
+                    num = num / 100  # Convert growth % to decimal
+                else:
+                    # Ignore % in other contexts (like margins)
+                    continue
+        else:
+            # Filter based on context:
+            if "cash flow" in context.lower():
+                # Expect large magnitudes (≥1e8)
+                if num < 1e8:
+                    continue
+            elif "price" in context.lower():
+                # Price should be between $1 and $2000
+                if num < 1 or num > 2000:
+                    continue
+            elif "growth" in context.lower():
+                # Accept small percentages (convert if > 1)
+                if num > 1:
+                    num = num / 100
+            else:
+                continue
+
+        values.append(num)
+    return values
+
+
+
+
+def query_chunks(company: str, year: str, query: str, k: int = 5) -> str:
+    """Query relevant text from parser_data."""
+    results = collection.similarity_search(f"{company} {year} {query}", k=k)
+    return " ".join([r.page_content for r in results])
+
+
+# ---------------------- MAIN ---------------------- #
+if __name__ == "__main__":
+    company = "Apple"
+    year = "2024"
+
+    print(f"\n🔍 Querying parser_data for {company} ({year})...\n")
+
+    try:
+        # --- Retrieve Relevant Chunks ---
+        fcf_text = query_chunks(company, year, "free cash flow operating cash flow")
+        price_text = query_chunks(company, year, "stock price market price share price")
+        growth_text = query_chunks(company, year, "growth rate terminal growth long-term growth")
+
+        print("=== Retrieved Chunks (Preview) ===")
+        print("FCF:", fcf_text[:250], "\n")
+        print("Price:", price_text[:250], "\n")
+        print("Growth:", growth_text[:250], "\n")
+
+        # --- Extract Numeric Values ---
+        fcf_values = extract_number_with_unit(fcf_text, "cash flow")
+        current_price_list = extract_number_with_unit(price_text, "price")
+        growth_values = extract_number_with_unit(growth_text, "growt")
+
+        # --- Handle Missing or Noisy Data ---
+        fcf_values = fcf_values[:5] if fcf_values else [9e9, 9.5e9, 10e9, 10.5e9, 11e9]
+        current_price = current_price_list[0] if current_price_list else 174.5
+        terminal_growth_rate = (growth_values[0] / 100) if growth_values else 0.025
+        discount_rate = 0.09
+
+        print("\n✅ Parsed Inputs:")
+        print(f"Free Cash Flows: {fcf_values}")
+        print(f"Current Price: {current_price}")
+        print(f"Terminal Growth Rate: {terminal_growth_rate}")
+        print(f"Discount Rate: {discount_rate}\n")
+
+        # --- Run DCF ---
+        result = calculate_dcf(fcf_values, discount_rate, terminal_growth_rate, current_price)
+
+        print("=== 📊 Valuation Results ===")
+        for k, v in result.items():
+            print(f"{k}: {v}")
+
+    except Exception as e:
+        print(f"⚠️ Error during valuation: {e}")
+
+"""
 if __name__ == "__main__":
     print("\n=== DCF Valuation Test ===")
 
@@ -83,3 +213,4 @@ if __name__ == "__main__":
     else:
         print(f"Overvalued by: {abs(result['undervaluation_percent']):.1f}%")
 
+"""
