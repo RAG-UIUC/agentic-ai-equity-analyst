@@ -5,6 +5,8 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain.tools import tool
 from typing import List, Dict
+import yfinance as yf
+
 
 
 # ---------------------- ENV + EMBEDDINGS ---------------------- #
@@ -29,28 +31,14 @@ def calculate_dcf(
     free_cash_flows: List[float],
     discount_rate: float,
     terminal_growth_rate: float,
-    current_price: float
+    current_price: float,
+    shares_outstanding: float = None
 ) -> Dict[str, float]:
     """
-    Calculate the intrinsic value of a company using the Discounted Cash Flow model.
+    Calculate intrinsic value using the Discounted Cash Flow model.
 
-    Parameters
-    ----------
-    free_cash_flows : list of float
-        Projected free cash flows for the next N years (usually 5).
-    discount_rate : float
-        Discount rate (e.g., WACC) as a decimal. Example: 0.10 for 10%.
-    terminal_growth_rate : float
-        Long-term perpetual growth rate (e.g., 0.02 for 2%).
-    current_price : float
-        Current market price per share or per company basis.
-
-    Returns
-    -------
-    dict
-        Dictionary containing intrinsic value, current price, undervaluation %, and terminal value.
+    If shares_outstanding is provided, returns per-share valuation.
     """
-
     n = len(free_cash_flows)
 
     # Step 1: Discount each year's FCF
@@ -59,18 +47,20 @@ def calculate_dcf(
         for i, fcf in enumerate(free_cash_flows)
     ]
 
-    # Step 2: Compute terminal value using Gordon Growth Model
+    # Step 2: Compute terminal value
     terminal_value = (
         free_cash_flows[-1] * (1 + terminal_growth_rate)
     ) / (discount_rate - terminal_growth_rate)
 
-    # Step 3: Discount terminal value to present
     discounted_terminal_value = terminal_value / ((1 + discount_rate) ** n)
+    intrinsic_value_total = sum(discounted_fcf) + discounted_terminal_value
 
-    # Step 4: Sum discounted FCFs + discounted terminal value
-    intrinsic_value = sum(discounted_fcf) + discounted_terminal_value
+    # Step 3: Adjust for per-share valuation
+    if shares_outstanding and shares_outstanding > 0:
+        intrinsic_value = intrinsic_value_total / shares_outstanding
+    else:
+        intrinsic_value = intrinsic_value_total
 
-    # Step 5: Compare intrinsic value vs current price
     undervaluation_percent = ((intrinsic_value - current_price) / current_price) * 100
 
     return {
@@ -78,6 +68,7 @@ def calculate_dcf(
         "current_price": round(current_price, 2),
         "undervaluation_percent": round(undervaluation_percent, 2),
         "terminal_value": round(terminal_value, 2),
+        "shares_outstanding": shares_outstanding,
     }
 
 
@@ -153,6 +144,13 @@ if __name__ == "__main__":
         price_text = query_chunks(company, year, "stock price market price share price trading at")
         growth_text = query_chunks(company, year, "growth rate terminal growth long-term growth")
         discount_text = query_chunks(company, year, "WACC cost of capital discount rate")
+        # --- Retrieve Ticker Symbol ---
+        symbol_text = query_chunks(company, year, "stock symbol ticker symbol company symbol")
+        ticker_match = re.search(r"\b[A-Z]{1,5}\b", symbol_text)
+
+        ticker = ticker_match.group(0) if ticker_match else None
+        print(f"Ticker symbol found: {ticker if ticker else '⚠️ Not found'}")
+
 
         print("=== Retrieved Chunks (Preview) ===")
         print("FCF:", fcf_text[:250], "\n")
@@ -174,6 +172,21 @@ if __name__ == "__main__":
         terminal_growth_rate = growth_values[0] if growth_values else 0.025
         discount_rate = discount_values[0] if discount_values else 0.09
 
+        # --- Get Shares Outstanding using yfinance ---
+        if ticker:
+            try:
+                yf_ticker = yf.Ticker(ticker)
+                shares_outstanding = yf_ticker.info.get("sharesOutstanding")
+                print(f"Shares Outstanding: {shares_outstanding:,}")
+            except Exception as e:
+                print(f"⚠️ Could not retrieve shares outstanding for {ticker}: {e}")
+                shares_outstanding = None
+        else:
+            shares_outstanding = None
+
+
+        
+
         print("\n✅ Parsed Inputs:")
         print(f"Free Cash Flows: {fcf_values}")
         print(f"Current Price: {current_price}")
@@ -181,7 +194,14 @@ if __name__ == "__main__":
         print(f"Discount Rate: {discount_rate}\n")
 
         # --- Run DCF ---
-        result = calculate_dcf(fcf_values, discount_rate, terminal_growth_rate, current_price)
+        result = calculate_dcf(
+        free_cash_flows=fcf_values,
+        discount_rate=discount_rate,
+        terminal_growth_rate=terminal_growth_rate,
+        current_price=current_price,
+        shares_outstanding=shares_outstanding
+        )
+
 
         print("=== 📊 Valuation Results ===")
         for k, v in result.items():
