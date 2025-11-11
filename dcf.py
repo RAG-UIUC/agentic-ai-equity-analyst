@@ -76,55 +76,85 @@ def calculate_dcf(
 # ---------------------- HELPERS ---------------------- #
 def extract_number_with_unit(text: str, context: str = "") -> List[float]:
     """
-    Extract numbers with unit detection and contextual filtering.
-    Example: '$27.9 billion' -> 27900000000.0
+    Extracts numeric values with optional units (billion, %, etc.)
+    Handles FCF, prices, growth rates, discount rates, etc.
+    Accepts decimal rates (0.09) while rejecting dates/months/years.
     """
-    # Capture the original text span so we can check for $ directly
-    pattern = r"(\$?\d+(?:\.\d+)?)\s*(billion|million|thousand|%)?"
+    pattern = r"(\$?\d+(?:\.\d+)?)\s*(billion|million|thousand|%|percent)?"
     matches = re.finditer(pattern, text, flags=re.IGNORECASE)
     values = []
 
+    MONTHS = {
+        "jan","feb","mar","apr","may","jun","jul","aug","sep","sept","oct","nov","dec",
+        "january","february","march","april","june","july","august","september",
+        "october","november","december"
+    }
+
     for match in matches:
         num_str, unit = match.groups()
+        unit = (unit or "").lower()
 
-        # Skip years (e.g., 2020–2030)
+        # Skip 4-digit years
         if len(num_str) == 4 and num_str.startswith(("19", "20")):
             continue
 
-        # --- 1️⃣ Handle price: must have a $ in front of this specific match
-        if "price" in context.lower():
-            if not num_str.strip().startswith("$"):
-                continue  # reject 51 million, 14, etc.
+        # Skip day-of-month numbers near month names (e.g., "June 29, 2024")
+        span_start, span_end = match.span()
+        window = text[max(0, span_start-12):min(len(text), span_end+12)].lower()
+        if num_str.isdigit() and 1 <= int(num_str) <= 31:
+            if any(m in window for m in MONTHS):
+                continue
 
-        # --- 2️⃣ Convert to numeric
+        # Price must have a $
+        if "price" in context.lower() and not num_str.strip().startswith("$"):
+            continue
+
+        # Convert numeric part
         num = float(num_str.replace("$", ""))
 
-        # --- 3️⃣ Apply units
-        if unit:
-            unit = unit.lower()
-            if "billion" in unit:
+        # Handle monetary scale
+        if unit in {"billion", "million", "thousand"}:
+            if unit == "billion":
                 num *= 1e9
-            elif "million" in unit:
+            elif unit == "million":
                 num *= 1e6
-            elif "thousand" in unit:
+            elif unit == "thousand":
                 num *= 1e3
-            elif "%" in unit:
-                if "growth" in context.lower() or "discount" in context.lower():
-                    num = num / 100
-                else:
-                    continue
-        else:
-            # context-specific small filters
-            if "cash flow" in context.lower() and num < 1e8:
+
+        # Handle percentages
+        elif unit in {"%", "percent"}:
+            if "growth" in context.lower() or "discount" in context.lower():
+                num = num / 100
+            else:
                 continue
-            if "growth" in context.lower() and num > 1:
-                num = num / 100
-            if "discount" in context.lower() and num > 1:
-                num = num / 100
+
+        # Handle bare numbers intelligently
+        else:
+            if "cash flow" in context.lower():
+                # Skip unrealistically small numbers (e.g., 50 or 1000)
+                if num < 1e8:
+                    continue
+
+            elif "price" in context.lower():
+                # Prices must be reasonable
+                if num < 1:
+                    continue
+
+            elif "growth" in context.lower() or "discount" in context.lower():
+                # Allow decimals like 0.05–0.20 (5–20%)
+                if 0 < num < 1:
+                    pass  # keep as-is
+                elif 1 <= num <= 100:
+                    num = num / 100  # convert from percent
+                else:
+                    # Out-of-range (like 2024 or 500) → skip
+                    continue
 
         values.append(num)
 
     return values
+
+
 
 def query_chunks(company: str, year: str, query: str, k: int = 5) -> str:
     """Query relevant text from parser_data."""
@@ -166,21 +196,46 @@ if __name__ == "__main__":
 
         # --- Handle Missing or Noisy Data ---
         fcf_values = fcf_values[:5] if fcf_values else [9e9, 9.5e9, 10e9, 10.5e9, 11e9]
+        # Auto-correct likely quarterly FCFs (e.g., 20–30B for Apple
+        if fcf_values and max(fcf_values) < 5e10:  # less than $50B
+            print("⚠️ Detected low FCF — scaling by 4× to annualize quarterly figure.")
+            fcf_values = [fcf * 4 for fcf in fcf_values]
 
         # ✅ Require that price has a dollar sign
         current_price = current_price_list[0] if current_price_list else 174.5
         terminal_growth_rate = growth_values[0] if growth_values else 0.025
         discount_rate = discount_values[0] if discount_values else 0.09
 
+        # --- Sanity checks and defaults ---
+        if not (-0.05 <= terminal_growth_rate <= 0.06):  # -5% to +6%
+            terminal_growth_rate = 0.025  # reset to 2.5%
+        if not (0.04 <= discount_rate <= 0.20):          # 4% to 20%
+            discount_rate = 0.09  # reset to 9%
+            # Ensure r > g for terminal value
+        if discount_rate <= terminal_growth_rate:
+            discount_rate = terminal_growth_rate + 0.01
+
+
         # --- Get Shares Outstanding using yfinance ---
+        shares_outstanding = None
         if ticker:
             try:
                 yf_ticker = yf.Ticker(ticker)
-                shares_outstanding = yf_ticker.info.get("sharesOutstanding")
-                print(f"Shares Outstanding: {shares_outstanding:,}")
+                year_int = int(year)
+                start_date = f"{year_int}-01-01"
+                end_date = f"{year_int}-12-31"
+                # Try to pull year-specific shares
+                shares_hist = yf_ticker.get_shares_full(start=start_date, end=end_date)
+                if shares_hist is not None and not shares_hist.empty:
+                    # Get the last reported share count during that year
+                     shares_outstanding = int(shares_hist.iloc[-1])
+                     print(f"Shares Outstanding ({year}): {shares_outstanding:,}")
+                else:
+                    # Fallback to latest
+                    shares_outstanding = yf_ticker.info.get("sharesOutstanding")
+                    print(f"⚠️ Using latest shares outstanding ({shares_outstanding:,}) — no data for {year}.")
             except Exception as e:
                 print(f"⚠️ Could not retrieve shares outstanding for {ticker}: {e}")
-                shares_outstanding = None
         else:
             shares_outstanding = None
 
