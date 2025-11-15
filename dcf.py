@@ -136,8 +136,6 @@ def find_dcf(company: str, year: str):
    
    """
     
-    print(f"\n🔍 Querying parser_data for {company} ({year})...\n")
-
     try:
         # --- Retrieve Relevant Chunks ---
         fcf_text = query_chunks(company, year, "free cash flow operating cash flow")
@@ -149,14 +147,6 @@ def find_dcf(company: str, year: str):
         ticker_match = re.search(r"\b[A-Z]{1,5}\b", symbol_text)
 
         ticker = ticker_match.group(0) if ticker_match else None
-        print(f"Ticker symbol found: {ticker if ticker else '⚠️ Not found'}")
-
-
-        print("=== Retrieved Chunks (Preview) ===")
-        print("FCF:", fcf_text[:250], "\n")
-        print("Price:", price_text[:250], "\n")
-        print("Growth:", growth_text[:250], "\n")
-        print("Discount:", discount_text[:250], "\n")
 
         # --- Extract Numeric Values ---
         fcf_values = extract_number_with_unit(fcf_text, "cash flow")
@@ -177,18 +167,12 @@ def find_dcf(company: str, year: str):
             try:
                 yf_ticker = yf.Ticker(ticker)
                 shares_outstanding = yf_ticker.info.get("sharesOutstanding")
-                print(f"Shares Outstanding: {shares_outstanding:,}")
+                #print(f"Shares Outstanding: {shares_outstanding:,}")
             except Exception as e:
-                print(f"⚠️ Could not retrieve shares outstanding for {ticker}: {e}")
+                #print(f"⚠️ Could not retrieve shares outstanding for {ticker}: {e}")
                 shares_outstanding = None
         else:
             shares_outstanding = None
-
-        print("\n✅ Parsed Inputs:")
-        print(f"Free Cash Flows: {fcf_values}")
-        print(f"Current Price: {current_price}")
-        print(f"Terminal Growth Rate: {terminal_growth_rate}")
-        print(f"Discount Rate: {discount_rate}\n")
 
         # --- Run DCF ---
         result = calculate_dcf(
@@ -199,12 +183,7 @@ def find_dcf(company: str, year: str):
         shares_outstanding=shares_outstanding
         )
 
-
-        #print("=== 📊 Valuation Results ===")
-        #for k, v in result.items():
-        #    print(f"{k}: {v}")
-
-        return result 
+        return str(result) 
     
     except Exception as e:
         print(f"⚠️ Error during valuation: {e}")
