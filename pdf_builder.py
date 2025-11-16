@@ -11,5 +11,3 @@ def report(content):
 
    st.write(content)
 
-
-report("aabb")
