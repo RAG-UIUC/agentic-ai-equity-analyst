@@ -10,7 +10,7 @@ from dcf import find_dcf
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2, timeout=30)
-tools = [analyze, find_dcf, report]
+tools = [analyze, find_dcf]
 tools_by_name = {tool.name: tool for tool in tools}
 llm.bind_tools(tools)
 
@@ -32,8 +32,6 @@ class ResponseFormat:
     """Response format for the agent"""
     answer: str 
 
-
-
 agent = create_deep_agent(model=llm, 
                      system_prompt=SYSTEM_PROMPT, 
                      tools=tools, 
@@ -42,7 +40,10 @@ agent = create_deep_agent(model=llm,
 
 response = agent.invoke(
 
-    {"messages" : [{"role" : "user", "content" : "perform a financial analysis on Apple in 2024 and use metrics from the dcf"}]}
+    {"messages" : [{"role" : "user", "content" : "perform a financial analysis on Apple in 2024 with metrics from the dcf"}]}
 )
 
-print(response["messages"][-1].content)
+text = response["messages"][-1].content
+
+
+report(text)
