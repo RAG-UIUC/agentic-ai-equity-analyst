@@ -62,6 +62,7 @@ def clean_text(text):
   text = re.sub(r'\s+', ' ', text)
   text = text.strip()
   return text
+
 with open("parser_queries.txt", "r") as f:
     for line in f:
       line = line.strip()

@@ -134,6 +134,7 @@ def parse_json(obj, par_str, parent_id):
 
 def embed_filing(ticker, company, year, per):
   url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
+  
   json_data = requests.get(url).json()
   doctype = ""
 
@@ -162,7 +163,7 @@ def embed_filing(ticker, company, year, per):
                                   }])
 
 
-embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q1")
-embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q2")
-embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q3")
-embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q4")
+#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q1")
+#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q2")
+#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q3")
+#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q4")
