@@ -1,7 +1,5 @@
 import streamlit as st
-#from langchain.tools import tool
-
-# yes i know it's like 8 lines roflmao
+from langchain.tools import tool
 
 #@tool 
 def report(content):

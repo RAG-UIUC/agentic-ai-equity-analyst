@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
+from langchain.tools import tool
 from typing import List, Dict
 import yfinance as yf
 
@@ -68,96 +69,67 @@ def calculate_dcf(
     }
 
 
+
 # ---------------------- HELPERS ---------------------- #
 def extract_number_with_unit(text: str, context: str = "") -> List[float]:
     """
-    Extracts numeric values with optional units (billion, %, etc.)
-    Handles FCF, prices, growth rates, discount rates, etc.
-    Accepts decimal rates (0.09) while rejecting dates/months/years.
+    Extract numbers with unit detection and contextual filtering.
+    Example: '$27.9 billion' -> 27900000000.0
     """
-    pattern = r"(\$?\d+(?:\.\d+)?)\s*(billion|million|thousand|%|percent)?"
+    # Capture the original text span so we can check for $ directly
+    pattern = r"(\$?\d+(?:\.\d+)?)\s*(billion|million|thousand|%)?"
     matches = re.finditer(pattern, text, flags=re.IGNORECASE)
     values = []
 
-    MONTHS = {
-        "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
-        "january", "february", "march", "april", "june", "july", "august", "september",
-        "october", "november", "december"
-    }
-
     for match in matches:
         num_str, unit = match.groups()
-        unit = (unit or "").lower()
 
-        # Skip 4-digit years
+        # Skip years (e.g., 2020–2030)
         if len(num_str) == 4 and num_str.startswith(("19", "20")):
             continue
 
-        # Skip day-of-month numbers near month names (e.g., "June 29, 2024")
-        span_start, span_end = match.span()
-        window = text[max(0, span_start - 12):min(len(text), span_end + 12)].lower()
-        if num_str.isdigit() and 1 <= int(num_str) <= 31:
-            if any(m in window for m in MONTHS):
-                continue
+        # --- 1️⃣ Handle price: must have a $ in front of this specific match
+        if "price" in context.lower():
+            if not num_str.strip().startswith("$"):
+                continue  # reject 51 million, 14, etc.
 
-        # Price must have a $
-        if "price" in context.lower() and not num_str.strip().startswith("$"):
-            continue
-
-        # Convert numeric part
+        # --- 2️⃣ Convert to numeric
         num = float(num_str.replace("$", ""))
 
-        # Handle monetary scale
-        if unit in {"billion", "million", "thousand"}:
-            if unit == "billion":
+        # --- 3️⃣ Apply units
+        if unit:
+            unit = unit.lower()
+            if "billion" in unit:
                 num *= 1e9
-            elif unit == "million":
+            elif "million" in unit:
                 num *= 1e6
-            elif unit == "thousand":
+            elif "thousand" in unit:
                 num *= 1e3
-
-        # Handle percentages
-        elif unit in {"%", "percent"}:
-            if "growth" in context.lower() or "discount" in context.lower():
-                num = num / 100
-            else:
-                continue
-
-        # Handle bare numbers intelligently
-        else:
-            if "cash flow" in context.lower():
-                # Skip unrealistically small numbers (e.g., 50 or 1000)
-                if num < 1e8:
-                    continue
-
-            elif "price" in context.lower():
-                # Prices must be reasonable
-                if num < 1:
-                    continue
-
-            elif "growth" in context.lower() or "discount" in context.lower():
-                # Allow decimals like 0.05–0.20 (5–20%)
-                if 0 < num < 1:
-                    pass  # keep as-is
-                elif 1 <= num <= 100:
-                    num = num / 100  # convert from percent
+            elif "%" in unit:
+                if "growth" in context.lower() or "discount" in context.lower():
+                    num = num / 100
                 else:
-                    # Out-of-range (like 2024 or 500) → skip
                     continue
+        else:
+            # context-specific small filters
+            if "cash flow" in context.lower() and num < 1e8:
+                continue
+            if "growth" in context.lower() and num > 1:
+                num = num / 100
+            if "discount" in context.lower() and num > 1:
+                num = num / 100
 
         values.append(num)
 
     return values
-
 
 def query_chunks(company: str, year: str, query: str, k: int = 5) -> str:
     """Query relevant text from parser_data."""
     results = collection.similarity_search(f"{company} {year} {query}", k=k)
     return " ".join([r.page_content for r in results])
 
-
 # ---------------------- NEW: YAHOO-BASED DCF HELPER ---------------------- #
-def get_dcf_inputs_from_yahoo(ticker: str, years: int = 5) -> Dict[str, float]:
+def get_dcf_inputs_from_yahoo(ticker: str, years: int = 5) -> Dict:
     """
     Build DCF input parameters using only Yahoo Finance data:
       - Free cash flows (last `years` from cashflow statement)
@@ -232,134 +204,37 @@ def get_dcf_inputs_from_yahoo(ticker: str, years: int = 5) -> Dict[str, float]:
         "shares_outstanding": shares_outstanding,
     }
 
+# ---------------------- MAIN ---------------------- #
 
-# ---------------------- MAIN: RUN BOTH METHODS + DIFFERENCE ---------------------- #
-if __name__ == "__main__":
-    company = "Apple"
-    year = "2024"
+def find_dcf(company: str, year: str):
+    symbol_text = query_chunks(company, year, "stock symbol ticker symbol company symbol")
+    ticker_match = re.search(r"\b[A-Z]{1,5}\b", symbol_text)
+    ticker = ticker_match.group(0) if ticker_match else None
+    yahoo_result = None
 
-    
-
-    try:
-        # ---------- 1) VECTOR / FILINGS-BASED PIPELINE (YOUR ORIGINAL LOGIC) ----------
-        fcf_text = query_chunks(company, year, "free cash flow operating cash flow")
-        price_text = query_chunks(company, year, "stock price market price share price trading at")
-        growth_text = query_chunks(company, year, "growth rate terminal growth long-term growth")
-        discount_text = query_chunks(company, year, "WACC cost of capital discount rate")
-        symbol_text = query_chunks(company, year, "stock symbol ticker symbol company symbol")
-        ticker_match = re.search(r"\b[A-Z]{1,5}\b", symbol_text)
-        ticker = ticker_match.group(0) if ticker_match else None
-        #print(f"Ticker symbol (from filings): {ticker if ticker else '⚠️ Not found'}")
-
-        #print("=== Retrieved Chunks (Preview) ===")
-        #print("FCF:", fcf_text[:250], "\n")
-        #print("Price:", price_text[:250], "\n")
-        #print("Growth:", growth_text[:250], "\n")
-        #print("Discount:", discount_text[:250], "\n")
-
-        # Extract numeric values
-        fcf_values = extract_number_with_unit(fcf_text, "cash flow")
-        current_price_list = extract_number_with_unit(price_text, "price")
-        growth_values = extract_number_with_unit(growth_text, "growth")
-        discount_values = extract_number_with_unit(discount_text, "discount rate")
-
-        # Handle missing / noisy
-        fcf_values = fcf_values[:5] if fcf_values else [9e9, 9.5e9, 10e9, 10.5e9, 11e9]
-        if fcf_values and max(fcf_values) < 5e10:
-            print(" Detected low FCF — scaling by 4× to annualize quarterly figure.")
-            fcf_values = [fcf * 4 for fcf in fcf_values]
-
-        current_price = current_price_list[0] if current_price_list else 174.5
-        terminal_growth_rate = growth_values[0] if growth_values else 0.025
-        discount_rate = discount_values[0] if discount_values else 0.09
-
-        # Sanity checks
-        if not (-0.05 <= terminal_growth_rate <= 0.06):
-            terminal_growth_rate = 0.025
-        if not (0.04 <= discount_rate <= 0.20):
-            discount_rate = 0.09
-        if discount_rate <= terminal_growth_rate:
-            discount_rate = terminal_growth_rate + 0.01
-
-        # Shares outstanding (year-specific if possible)
-        shares_outstanding = None
-        if ticker:
-            try:
-                yf_ticker = yf.Ticker(ticker)
-                year_int = int(year)
-                start_date = f"{year_int}-01-01"
-                end_date = f"{year_int}-12-31"
-                shares_hist = yf_ticker.get_shares_full(start=start_date, end=end_date)
-                if shares_hist is not None and not shares_hist.empty:
-                    shares_outstanding = int(shares_hist.iloc[-1])
-                    print(f"Shares Outstanding ({year}): {shares_outstanding:,}")
-                else:
-                    shares_outstanding = yf_ticker.info.get("sharesOutstanding")
-                    print(f" Using latest shares outstanding ({shares_outstanding:,}) — no data for {year}.")
-            except Exception as e:
-                print(f" Could not retrieve shares outstanding for {ticker}: {e}")
-
-        print("\n Parsed Inputs (ChomaDB Method):")
-        print(f"Free Cash Flows: {fcf_values}")
-        print(f"Current Price: {current_price}")
-        print(f"Terminal Growth Rate: {terminal_growth_rate}")
-        print(f"Discount Rate: {discount_rate}\n")
-
-        vector_result = calculate_dcf(
-            free_cash_flows=fcf_values,
-            discount_rate=discount_rate,
-            terminal_growth_rate=terminal_growth_rate,
-            current_price=current_price,
-            shares_outstanding=shares_outstanding
-        )
-
-        print("=== ChromaDB Valuation ===")
-        for k, v in vector_result.items():
-            print(f"{k}: {v}")
-
-        # ---------- 2) YAHOO-BASED DCF PIPELINE ----------
-        yahoo_result = None
-        if ticker:
-            try:
-                print("\n Running Yahoo-based DCF...")
-                yahoo_inputs = get_dcf_inputs_from_yahoo(ticker, years=5)
-                yahoo_result = calculate_dcf(
+    if ticker:            
+        try:
+            yahoo_inputs = get_dcf_inputs_from_yahoo(ticker, years=5)
+            yahoo_result = calculate_dcf(
                     free_cash_flows=yahoo_inputs["free_cash_flows"],
                     discount_rate=yahoo_inputs["discount_rate"],
                     terminal_growth_rate=yahoo_inputs["terminal_growth_rate"],
                     current_price=yahoo_inputs["current_price"],
                     shares_outstanding=yahoo_inputs["shares_outstanding"],
                 )
+            
+            return str(yahoo_result)
+        except Exception as e:
+            return f" Error during Yahoo-based DCF: {e}"
+    else:
+        return "Skipping Yahoo-based DCF — no ticker symbol found from filings."
+    
 
-                print("\n Parsed Inputs (Yahoo Method):")
-                print(f"Free Cash Flows: {yahoo_inputs['free_cash_flows']}")
-                print(f"Current Price: {yahoo_inputs['current_price']}")
-                print(f"Terminal Growth Rate: {yahoo_inputs['terminal_growth_rate']}")
-                print(f"Discount Rate: {yahoo_inputs['discount_rate']}")
-                print(f"Shares Outstanding: {yahoo_inputs['shares_outstanding']}")
-
-                print("\n=== Yahoo-Based Valuation ===")
-                for k, v in yahoo_result.items():
-                    print(f"{k}: {v}")
-
-            except Exception as e:
-                print(f" Error during Yahoo-based DCF: {e}")
-        else:
-            print("\n Skipping Yahoo-based DCF — no ticker symbol found from filings.")
-
-        # ---------- 3) DIFFERENCE BETWEEN METHODS ----------
-        if yahoo_result is not None:
-            iv_vector = vector_result["intrinsic_value"]
-            iv_yahoo = yahoo_result["intrinsic_value"]
-            abs_diff = round(iv_yahoo - iv_vector, 2)
-            avg_iv = (iv_vector + iv_yahoo) / 2 if (iv_vector + iv_yahoo) != 0 else None
-            pct_diff = round(abs_diff / avg_iv * 100, 2) if avg_iv else None
-
-            print("\n===  Method Comparison ===")
-            print(f"Chroma DB IV: {iv_vector}")
-            print(f"Yahoo IV:         {iv_yahoo}")
-            print(f"Absolute Diff:    {abs_diff}")
-            print(f"% Diff vs Avg:    {pct_diff}%")
-
-    except Exception as e:
-        print(f" Error during valuation: {e}")
+@tool 
+def find_dcf_tool(company: str, year: str):
+    """
+    Perform a Discounted Cash Flow analysis of a given company in a specific year.  
+    Takes two strings as its arguments, first for the company and secondly for the year (formatted like XXXX)
+    Returns result in form of string 
+    """
+    return find_dcf(company, year)

@@ -6,11 +6,11 @@ from pdf_builder import report
 from analyst import analyze
 from dataclasses import dataclass
 from deepagents import create_deep_agent
-from dcf import find_dcf
+from dcf import find_dcf_tool
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2, timeout=30)
-tools = [analyze, find_dcf]
+tools = [analyze, find_dcf_tool]
 tools_by_name = {tool.name: tool for tool in tools}
 llm.bind_tools(tools)
 
@@ -19,13 +19,11 @@ SYSTEM_PROMPT = """
 
                 You have access to two tools:
                 - analyze: use this to get an analysis of financial data pertinent to the prompt given to you
-                - find_dcf: use this to perform a Discounted Cash Flow analysis of a given company in a specific year
+                - find_dcf_tool: use this to perform a Discounted Cash Flow analysis of a given company in a specific year
                 
 
                 Make sure that the user gets an accurate, concise response. 
                 """
-
-#checkpointer = InMemorySaver()
 
 @dataclass
 class ResponseFormat:
@@ -45,5 +43,5 @@ response = agent.invoke(
 
 text = response["messages"][-1].content
 
-
+print(text)
 report(text)

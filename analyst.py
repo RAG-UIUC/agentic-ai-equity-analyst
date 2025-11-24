@@ -25,17 +25,20 @@ collection = Chroma(
 model = init_chat_model("gpt-4o", model_provider="openai")
 
 
-# TODO: modify so that you can query on multiple differnt collections 
+# TODO: modify so that you can query on multiple different collections 
 @tool
 def analyze(query):
-    """Analyze the query using the data fetched in the database
-    
     """
+    Analyze the query using the data fetched in the database
+    Takes just one string as an argument 
+    """
+    try:
+        res = collection.similarity_search(query=query, k=10)
 
-    res = collection.similarity_search(query=query, k=10)
-
-    messages = [SystemMessage(content="You are a professional technical financial analyst."),
-                HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
-                ]
-    
-    return model.invoke(messages).content
+        messages = [SystemMessage(content="You are a professional technical financial analyst."),
+                    HumanMessage(content=f"Summarize and analyze the following data: {res[:]} . Do not repeat yourself"),
+                    ]
+        
+        return model.invoke(messages).content
+    except Exception as e:
+        print(f"Error while running tool: {e}")

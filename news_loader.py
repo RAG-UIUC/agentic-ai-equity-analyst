@@ -6,15 +6,12 @@ Uses Perplexity Sonar API to fetch recent company news headlines and store them 
 
 from __future__ import annotations
 import os
-import time
 import uuid
 import datetime as dt
 from dataclasses import dataclass
 from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
-
 from perplexity import Perplexity
-
 import chromadb
 from chromadb.utils import embedding_functions
 import pytz 
@@ -169,7 +166,6 @@ def build_metadata(
 
 
 # Chroma upsert
-
 def get_chroma_collection(
     collection_name: str = "news_data",
     persist_dir: str = "./chroma"

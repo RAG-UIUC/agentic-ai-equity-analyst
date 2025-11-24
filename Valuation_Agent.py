@@ -4,11 +4,10 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain.tools import tool
 
 load_dotenv()
 '''INPUT FACTORS'''
-company = "Apple"
-year = "2024"
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 
 parser_data = Chroma(
@@ -27,12 +26,13 @@ news_data = Chroma(
 
 
 model = init_chat_model("gpt-4o", model_provider="openai")
+
+company = "Apple"
+year = "2024"
 query = "Detailed valuation of Apple in recent times"
 res = parser_data.similarity_search(query=query, k=10)
 res.extend(news_data.similarity_search(query=query, k=10))
-
-dcf_calculation = dcf.calculate_dcf([9.0, 9.5, 10, 10.5, 11], 0.09, 0.025, 174.5) #placeholder values
-# TODO: get values for dcf that AREN'T FUDGED 
+dcf_calculation = dcf.find_dcf("Apple", "2024")
 
 messages = [
             SystemMessage(content="""
@@ -55,6 +55,7 @@ messages = [
 
                         """)
       ]
+
 with(open("output.txt", "w") as f):
     print(model.invoke(messages).content, file=f)
     
