@@ -3,29 +3,29 @@
 
 from langchain_openai import ChatOpenAI
 from pdf_builder import report 
-from analyst import analyze
+from analyst import analyze_filings, analyze_financials
 from dataclasses import dataclass
 from deepagents import create_deep_agent
-from dcf import find_dcf
+from dcf import find_dcf_tool
+from valuation_agent import valuation_tool
 
 
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2, timeout=30)
-tools = [analyze, find_dcf]
+tools = [analyze_filings, find_dcf_tool, analyze_financials, valuation_tool]
 tools_by_name = {tool.name: tool for tool in tools}
 llm.bind_tools(tools)
 
 SYSTEM_PROMPT = """
-                You are a professional financial analyst tasked with answering any relevant prompts given to you.
+                You are a professional financial analyst tasked with completely answering any relevant prompts given to you.
 
-                You have access to two tools:
-                - analyze: use this to get an analysis of financial data pertinent to the prompt given to you
-                - find_dcf: use this to perform a Discounted Cash Flow analysis of a given company in a specific year
-                
+                You have access to 4 tools:
+                - analyze_filings: find specific financial metrics of a specific company at a given time in its 10-Q and 10-K filings
+                - find_dcf_tool: use this to perform a Discounted Cash Flow analysis of a given company in a specific year
+                - analyze_financials: find financial ticker data of a company
+                - valuation_tool: find a valuation analysis of a company in a given year written by an equity research analyst
 
-                Make sure that the user gets an accurate, concise response. 
+                Make sure that the user gets an accurate, concise response with data-driven reasoning. 
                 """
-
-#checkpointer = InMemorySaver()
 
 @dataclass
 class ResponseFormat:
@@ -37,13 +37,12 @@ agent = create_deep_agent(model=llm,
                      tools=tools, 
                      )
 
-
 response = agent.invoke(
 
-    {"messages" : [{"role" : "user", "content" : "perform a financial analysis on Apple in 2024 with metrics from the dcf"}]}
+    {"messages" : [{"role" : "user", "content" : "make a prediction on how Apple will perform in 2025 using all the tools you have"}]}
 )
 
 text = response["messages"][-1].content
 
-
-report(text)
+print(text)
+#report(text)

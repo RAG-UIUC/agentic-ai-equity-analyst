@@ -8,7 +8,6 @@ from langchain_experimental.text_splitter import SemanticChunker
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from datetime import timezone
-
 from langchain.tools import tool
 
 load_dotenv()
@@ -132,7 +131,7 @@ def parse_json(obj, par_str, parent_id):
   return chunks 
 
 
-def embed_filing(ticker, company, year, per):
+def embed_filing(ticker: str, company: str, year: str, per: str):
   url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
   
   json_data = requests.get(url).json()
@@ -162,6 +161,14 @@ def embed_filing(ticker, company, year, per):
                                     "type" : doctype
                                   }])
 
+@tool
+def embed_filing_tool(ticker: str, company: str, year: str, per: str):
+  """
+  Embed a 10-K or 10-Q filing into a ChromaDB database of a specific company. 
+  The arguments taken are as follows: company ticker, company name, year (formatted as XXXX), and the quarter (Q1, Q2, Q3, or FY)
+  Does not return anything  
+  """
+  return embed_filing(ticker, company, year, per)
 
 #embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q1")
 #embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q2")
