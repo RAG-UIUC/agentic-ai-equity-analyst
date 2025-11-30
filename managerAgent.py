@@ -1,23 +1,26 @@
 from pdf_builder import report_tool
 from analyst import analyze_filings, analyze_financials, analyze_news, analyze_parser
 from langchain_core.messages import HumanMessage, SystemMessage
-from deepagents import create_deep_agent
+from deepagents import create_deep_agent 
+from langchain import agents
 from dcf import find_dcf_tool
 from langchain.chat_models import init_chat_model
 from langchain.tools import tool
 from langchain_openai import ChatOpenAI
 from valuation_agent import valuation_tool
+from pdf_builder import report
 
-model = init_chat_model("gpt-4o", model_provider="openai")
+model = init_chat_model("gpt-5.1", model_provider="openai")
 llm = ChatOpenAI(model="gpt-4o", temperature=0.2, timeout=30)
 
 MANAGER_PROMPT = """
-You are a helpful professional equity analyst. Provide a comprehensive, thorough answer to any user query relevant to the performance
-of a given company using the tools at your disposal. 
-"""
+                You are a helpful professional equity analyst. Just print out the output from the one tool that you have:
+                - create_report: create a financial report for the user, takes a string as input detailing the company 
+                you want to make a report of and a specific time period to get metrics from 
+                """
 
 REPORTING_PROMPT = """
-                You are a professional financial analyst tasked with completely answering any relevant prompts given to you.
+                You are a helpful professional financial analyst tasked with consulting a user.
 
                 You have access to 4 tools:
                 - analyze_filings: find specific financial metrics of a specific company at a given time in its 10-Q and 10-K filings
@@ -31,7 +34,7 @@ REPORTING_PROMPT = """
 reporting_tools = [analyze_filings, find_dcf_tool, analyze_financials, valuation_tool]
 
 
-reporting_agent = create_deep_agent(model=llm, 
+reporting_agent = agents.create_agent(model=llm, 
                      system_prompt=REPORTING_PROMPT, 
                      tools=reporting_tools, 
                      )
@@ -40,7 +43,7 @@ reporting_agent = create_deep_agent(model=llm,
 @tool
 def create_report(request: str) -> str:
     """
-    Create a comprehensive financial report
+    Create a comprehensive financial analysis
     Use this when the user wants a financial evaluation of a company 
     """
     res = reporting_agent.invoke({
@@ -58,39 +61,24 @@ manager_agent = create_deep_agent(
 
 
 
-USER_PROMPT = "make a prediction on how Apple will perform in 2025 using all the tools you have"
+USER_PROMPT = "predict how Apple will perform in 2025 using financial metrics"
 
 messages = [SystemMessage(content="You are a helpful summarizer. Please focus on the key points and avoid writing an answer longer than 50 words."),
             HumanMessage(content=f"Summarize and reformulate the following in a clear, succinct manner: {USER_PROMPT}"),
             ]
         
-USER_PROMPT_REDO = model.invoke(messages).content
+#USER_PROMPT_REDO = model.invoke(messages).content
 
-print(USER_PROMPT_REDO)
+#print(USER_PROMPT_REDO)
 
-print("AAAAAAAAAAAAAAAAAAAAA")
+#print("AAAAAAAAAAAAAAAAAAAAA")
 
 response = manager_agent.invoke(
 
-    {"messages" : [{"role" : "user", "content" : USER_PROMPT_REDO}]}
+    {"messages" : [{"role" : "user", "content" : USER_PROMPT}]}
 )
 
 text = response["messages"][-1].content
 
 print(text)
-
-"""
-TODO:
-manager agent orchestrates everything
-
-
-MERGE THE FILING/PARSING AGENT!!!!!!!!!!!!!
-filings agent just retrieves filings and such, updating the chroma db with information
-parsing agent parses through filings and data, extracting revenues and earnings 
-
-
-the valuation agent is more like a valuation tool rofl rofl rofl rofl 
-valuation agent interacts with filings/parsing agent supposedly (to get data????) and uses DCF tool to output valuation
-
-reporting agent writes down report and such
-"""
+report(text)
