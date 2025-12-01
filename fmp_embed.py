@@ -134,39 +134,46 @@ def parse_json(obj, par_str, parent_id):
 def embed_filing(ticker: str, company: str, year: str, per: str):
   url = f"https://financialmodelingprep.com/stable/financial-reports-json?symbol={ticker}&year={year}&period={per}&apikey={fmp_key}"
   
-  json_data = requests.get(url).json()
-  doctype = ""
+  try: 
+    rep = requests.get(url)
+    rep.raise_for_status() 
+    json_data = rep.json()
+    doctype = ""
 
-  if per == "FY" or per == "Q4":
-    doctype = "10-K filing"
-  else:
-    doctype = "10-Q filing"
+    if per == "FY" or per == "Q4":
+      doctype = "10-K filing"
+    else:
+      doctype = "10-Q filing"
 
-  ny_tz = pytz.timezone("America/New_York")
-  ts_ny = datetime.datetime.now(ny_tz)
+    ny_tz = pytz.timezone("America/New_York")
+    ts_ny = datetime.datetime.now(ny_tz)
 
-  for i, cur_id, par_id in parse_json(json_data, "", 0):
-    collection.add_texts(texts=[i], 
-                        ids=[cur_id],
-                        metadatas=[{
-                                    "symbol" : ticker,
-                                    "company" : company,
-                                    "date_retrieved" : datetime.datetime.today().isoformat(),
-                                    "time_retrieved" : datetime.datetime.now(timezone.utc).astimezone(ny_tz).strftime("%H:%M:%S"),
-                                    "date_published" : ts_ny.date().isoformat(),
-                                    "time_published" : ts_ny.strftime("%H:%M:%S"),
-                                    "source" : "fmp",
-                                    "url" : url,
-                                    "parent" : par_id, 
-                                    "type" : doctype
-                                  }])
+    for i, cur_id, par_id in parse_json(json_data, "", 0):
+      collection.add_texts(texts=[i], 
+                          ids=[cur_id],
+                          metadatas=[{
+                                      "symbol" : ticker,
+                                      "company" : company,
+                                      "date_retrieved" : datetime.datetime.today().isoformat(),
+                                      "time_retrieved" : datetime.datetime.now(timezone.utc).astimezone(ny_tz).strftime("%H:%M:%S"),
+                                      "date_published" : ts_ny.date().isoformat(),
+                                      "time_published" : ts_ny.strftime("%H:%M:%S"),
+                                      "source" : "fmp",
+                                      "url" : url,
+                                      "parent" : par_id, 
+                                      "type" : doctype
+                                    }])
 
+    return "Filing embedding successful"
+  except requests.exceptions.RequestException as e:
+    return f"Error fetching filing: {e}"
+  
 @tool
 def embed_filing_tool(ticker: str, company: str, year: str, per: str):
   """
   Embed a 10-K or 10-Q filing into a ChromaDB database of a specific company. 
   The arguments taken are as follows: company ticker, company name, year (formatted as XXXX), and the quarter (Q1, Q2, Q3, or FY)
-  Does not return anything  
+  Will return a string indicating whether or not the operation was successful  
   """
   return embed_filing(ticker, company, year, per)
 
