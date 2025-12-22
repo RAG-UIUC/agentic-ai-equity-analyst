@@ -65,4 +65,5 @@ def valuation_tool(company: str, year: str):
     """
     return valuation(company, year)
 
-#print(valuation("Apple", "2024"))
+# Example: valuation("Microsoft", "2024")
+

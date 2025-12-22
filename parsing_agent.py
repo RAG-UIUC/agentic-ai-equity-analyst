@@ -11,11 +11,8 @@ from langchain.tools import tool
 
 load_dotenv()
 
-'''INPUT FACTORS'''
-company = "Apple"
-year = "2024"
-
 openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 EMBEDDING_MODEL = "text-embedding-3-small"
 embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)

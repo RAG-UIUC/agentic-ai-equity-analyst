@@ -10,3 +10,9 @@ langchain_experimental
 reportlab
 pytz
 deepagents
+chromadb
+perplexity
+yfinance
+pandas
+streamlit
+

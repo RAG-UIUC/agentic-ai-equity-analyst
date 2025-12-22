@@ -72,7 +72,7 @@ def get_daily_yf(company: str, symbol: str):
 @tool
 def get_daily_yf_tool(company: str, symbol: str):
     """
-    Get financial ticker data for a given company within the last month
+    Get financial ticker data for a given company within the last day
     Takes company name and its ticker as the arguments 
     """
     return get_daily_yf(company, symbol)

@@ -19,7 +19,7 @@ embeddings = OpenAIEmbeddings(model=EMBEDDING_MODEL)
 
 collection = Chroma(
     database=os.getenv("CHROMADB"),
-    collection_name="company_filings", # <-- PAY ATTENTION HERE
+    collection_name="company_filings",
     embedding_function=embeddings,
     chroma_cloud_api_key=os.getenv("CHROMADB_API_KEY"),
     tenant=os.getenv("CHROMADB_TENANT"),
@@ -34,7 +34,7 @@ json_splitter = RecursiveJsonSplitter(max_chunk_size=1000)
 txt_splitter = SemanticChunker(embeddings=embeddings, breakpoint_threshold_type="gradient", breakpoint_threshold_amount=0.5)
 MIN_CHUNK_SZ = 3 
 CHUNK_NO = 5 
-TXT_THRESHOLD = 200 # This is a good value. Please do not touch it. It's mine. - William    
+TXT_THRESHOLD = 200
 
 def clean_text(text):
   text = re.sub(r'\s+', ' ', text)
@@ -50,7 +50,6 @@ def chunk_text(txt):
   return [txt]
 
 def summary(text):
-  # i don't even know if the llm is going to follow these directions properly LOL 
   message = [SystemMessage(content="You are a helpful, punctual summarizer."),
               HumanMessage(content=f"Succinctly summarize the following: {text} (within 300 characters or less) while retaining all relevant details"),
               ]
@@ -92,7 +91,7 @@ def parse_json(obj, par_str, parent_id):
       cur_id = str(uuid.uuid4())
       alt = ""
 
-      for k, v in obj.items(): # i have to admit this code could be written better but i'll go fix it later probably
+      for k, v in obj.items():
         par += f"{k}, "
 
         if isinstance(v, (dict, list)): 
@@ -177,7 +176,9 @@ def embed_filing_tool(ticker: str, company: str, year: str, per: str):
   """
   return embed_filing(ticker, company, year, per)
 
-#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q1")
-#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q2")
-#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q3")
-#embed_filing(ticker="AAPL", company="Apple", year=2024, per="Q4")
+# Example manual runs:
+# embed_filing(ticker="MSFT", company="Microsoft", year="2024", per="Q1")
+# embed_filing(ticker="MSFT", company="Microsoft", year="2024", per="Q2")
+# embed_filing(ticker="MSFT", company="Microsoft", year="2024", per="Q3")
+# embed_filing(ticker="MSFT", company="Microsoft", year="2024", per="Q4")
+
